@@ -1,20 +1,43 @@
-//    __                  _   _
-//  / _| __ _ _ __   ___| |_| |
-// | |_ / _` | '_ \ / __| __| |
-// |  _| (_| | | | | (__| |_| |
-// |_|  \__,_|_| |_|\___|\__|_|
-//
-#ifndef CONFIG_H_
-#define CONFIG_H_
+#ifndef FANCTL_CONFIG_H_
+#define FANCTL_CONFIG_H_
 
-#define WIFI_SSID "YOUR_WIFI_SSID"
-#define WIFI_PASS "YOUR_WIFI_PASS"
-#define MQTT_SERV "MQTT_SRV_DNS_OR_IP"
+/* ************************************************************************** */
+/* compile-time config                                                        */
+/* ************************************************************************** */
+
+#ifndef HOSTNAME
+#define HOSTNAME "fanctl"
+#endif
+
+#ifndef WIFI_SSID
+#error "You must define WIFI_SSID"
+#endif
+#ifndef WIFI_PASS
+#error "You must define WIFI_PASS"
+#endif
+
+#ifndef MQTT_HOST
+#error "You must define MQTT_HOST"
+#endif
+#ifndef MQTT_USER
+#define MQTT_USER nullptr
+#endif
+#ifndef MQTT_PASS
+#define MQTT_PASS nullptr
+#endif
+#ifndef MQTT_PORT
 #define MQTT_PORT 1883
+#endif
 
-#define MQTT_FAN_CTL_TOPIC "fanctl"
-#define MQTT_RPM_TOPIC "fanrpm"
+#ifndef MQTT_FANCTL_TOPIC
+#define MQTT_FANCTL_TOPIC "fanctl"
+#endif
+#ifndef MQTT_FANRPM_TOPIC
+#define MQTT_FANRPM_TOPIC "fanrpm"
+#endif
+#ifndef MQTT_PUBLISH_INTERVAL_MS
 #define MQTT_PUBLISH_INTERVAL_MS 1000
+#endif
 
 #define MQTT_BUF_SIZE 256
 #define JSON_BUF_SIZE 256
@@ -27,4 +50,4 @@
 #define FAN_SPEED_PCT_MIN 0
 #define FAN_SPEED_PCT_MAX 100
 
-#endif  // CONFIG_H_
+#endif

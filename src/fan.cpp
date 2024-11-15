@@ -4,7 +4,7 @@
 // |  _| (_| | | | | (__| |_| |
 // |_|  \__,_|_| |_|\___|\__|_|
 //
-#include "fan.hpp"
+#include "fan.h"
 
 #include <Arduino.h>
 
@@ -23,35 +23,37 @@ static inline T clamp(T val, T min, T max) {
     return val;
 }
 
-Fan::Fan(uint8 pwmPin, uint8 tachPin, volatile uint32 *tachCnt,
-         void (*intHandler)(void)) {
-    if (digitalPinToInterrupt(tachPin) < 0) {
-        logf("ERROR: PIN <%d> is NOT an interrupt pin\n", tachPin);
+Fan::Fan(const uint8 pwmPin,
+         const uint8 tachometerPin,
+         volatile uint32 *tachometerCounter,
+         void (*interruptHandler)()) {
+    if (digitalPinToInterrupt(tachometerPin) < 0) {
+        logf("ERROR: PIN <%d> is NOT an interrupt pin\n", tachometerPin);
     }
 
     this->pwmPin = pwmPin;
-    this->tachPin = tachPin;
-    this->tachCnt = tachCnt;
+    this->tachometerPin = tachometerPin;
+    this->tachometerCounter = tachometerCounter;
     this->targetSpeed = 0;
 
     analogWriteFreq(PWM_FREQ);
     analogWriteRange(PWM_DUTY_MAX);
     pinMode(pwmPin, OUTPUT);
     analogWrite(pwmPin, PWM_DUTY_MIN);
-    pinMode(tachPin, INPUT_PULLUP);
-    attachInterrupt(tachPin, intHandler, FALLING);
+    pinMode(tachometerPin, INPUT_PULLUP);
+    attachInterrupt(tachometerPin, interruptHandler, FALLING);
 }
 
-void Fan::setSpeed(uint8 pct) {
-    uint8 clampedPct = CLAMP(pct, FAN_SPEED_PCT_MIN, FAN_SPEED_PCT_MAX);
-    uint16 trgSpd = (PWM_DUTY_MAX * clampedPct) / FAN_SPEED_PCT_MAX;
-    logf("pct=%d, clampedPct=%d, trgSpd=%d\n", pct, clampedPct, trgSpd);
+void Fan::setSpeed(const uint8 speedPercent) {
+    const uint8 clampedPct = CLAMP(speedPercent, FAN_SPEED_PCT_MIN, FAN_SPEED_PCT_MAX);
+    const uint16 trgSpd = (PWM_DUTY_MAX * clampedPct) / FAN_SPEED_PCT_MAX;
+    logf("pct=%d, clampedPct=%d, trgSpd=%d\n", speedPercent, clampedPct, trgSpd);
 
     this->targetSpeed = trgSpd;
 }
 
 void Fan::update() { analogWrite(pwmPin, targetSpeed); }
 
-int32 Fan::getTachCnt() const { return *tachCnt; }
+uint32 Fan::getTachometerCount() const { return *tachometerCounter; }
 
-void Fan::resetTachCnt() { *tachCnt = 0; }
+void Fan::resetTachometerCounter() { *tachometerCounter = 0; }

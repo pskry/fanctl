@@ -4,11 +4,8 @@ build:
 upload:
 	pio run -t upload
 
-monitor: upload
+monitor:
 	pio device monitor
-
-fmt format:
-	./format.sh
 
 init:
 	pio project init --ide vim

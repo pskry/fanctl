@@ -10,7 +10,7 @@
 #include <c_types.h>
 
 #include "./config.h"
-#include "./fan.hpp"
+#include "./fan.h"
 #include "./log.h"
 
 /* ************************************************************************** */
@@ -33,12 +33,12 @@ std::array<Fan, 3> fans = {FAN(1), FAN(2), FAN(3)};
 /* ************************************************************************** */
 /* setup                                                                      */
 /* ************************************************************************** */
-static void initWiFi(void);
-static void initMqttClient(void);
-static void ensureMqttConnection(void);
-static void onMqttMessage(char *topic, byte *payload, unsigned int length);
+static void initWiFi();
+static void initMqttClient();
+static void ensureMqttConnection();
+static void onMqttMessage(const char *topic, byte *payload, unsigned int length);
 
-void setup(void) {
+void setup() {
     initLog();
     initWiFi();
     initMqttClient();
@@ -48,6 +48,7 @@ void initWiFi() {
     logf("Connecting to %s\n", WIFI_SSID);
 
     WiFi.mode(WIFI_STA);
+    WiFi.hostname(HOSTNAME);
     WiFi.begin(WIFI_SSID, WIFI_PASS);
 
     while (WiFi.status() != WL_CONNECTED) {
@@ -63,20 +64,21 @@ void initWiFi() {
 
 void initMqttClient() {
     client.setBufferSize(MQTT_BUF_SIZE);
-    client.setServer(MQTT_SERV, MQTT_PORT);
+    client.setServer(MQTT_HOST, MQTT_PORT);
     client.setCallback(onMqttMessage);
 }
 
 /* ************************************************************************** */
 /* loop                                                                       */
 /* ************************************************************************** */
-uint64 prev = 0;
-void loop(void) {
+void loop() {
+    static uint64 prev = 0;
+
     ensureMqttConnection();
     client.loop();
 
-    uint64 now = millis();
-    int32 diff = now - prev;
+    const uint64 now = millis();
+    const uint64 diff = now - prev;
     if (diff >= MQTT_PUBLISH_INTERVAL_MS) {
         char buf[MQTT_BUF_SIZE];
         prev = now;
@@ -87,8 +89,8 @@ void loop(void) {
         noInterrupts();
         for (size_t i = 0; i < numFans; i++) {
             Fan fan = fans[i];
-            tachCnts[i] = fan.getTachCnt();
-            fan.resetTachCnt();
+            tachCnts[i] = fan.getTachometerCount();
+            fan.resetTachometerCounter();
             fan.update();
         }
         interrupts();
@@ -96,7 +98,7 @@ void loop(void) {
         doc.clear();
 
         for (size_t i = 0; i < numFans; ++i) {
-            int32 tachCnt = tachCnts[i];
+            uint32 tachCnt = tachCnts[i];
             uint32 rps = tachCnt * (diff / MQTT_PUBLISH_INTERVAL_MS);
             uint32 rpm = rps * 60;
 
@@ -105,8 +107,8 @@ void loop(void) {
         }
 
         serializeJsonPretty(doc, buf, MQTT_BUF_SIZE);
-        logf("publishing to topic <%s> - payload:\n%s\n", MQTT_RPM_TOPIC, buf);
-        client.publish(MQTT_RPM_TOPIC, buf);
+        logf("publishing to topic '%s' - payload:\n%s\n", MQTT_FANRPM_TOPIC, buf);
+        client.publish(MQTT_FANRPM_TOPIC, buf);
     }
 
     yield();
@@ -114,7 +116,7 @@ void loop(void) {
 
 void ensureMqttConnection() {
     if (!client.connected()) {
-        logf("Connecting to MQTT server <%s:%d> ...\n", MQTT_SERV, MQTT_PORT);
+        logf("Connecting to MQTT server '%s:%d' ...\n", MQTT_HOST, MQTT_PORT);
     }
 
     while (!client.connected()) {
@@ -122,8 +124,8 @@ void ensureMqttConnection() {
         if (client.connect(clientId.c_str())) {
             logln("Connected.");
 
-            logf("Subscribing to topic <%s> ...", MQTT_FAN_CTL_TOPIC);
-            client.subscribe(MQTT_FAN_CTL_TOPIC);
+            logf("Subscribing to topic '%s' ...", MQTT_FANCTL_TOPIC);
+            client.subscribe(MQTT_FANCTL_TOPIC);
             logln(" done.");
         } else {
             logf("Failure. state=%d; retrying in 5s...\n", client.state());
@@ -132,21 +134,22 @@ void ensureMqttConnection() {
     }
 }
 
-void onMqttMessage(char *topic, byte *payload, unsigned int length) {
-    logf("Message arrived on topic <%s> ...\n", topic);
+void onMqttMessage(const char *topic, byte *payload, const unsigned int length) {
+    (void)topic;
+
+    logf("Message arrived on topic '%s' ...\n", topic);
     for (unsigned int i = 0; i < length; i++) {
         log(static_cast<char>(payload[i]));
     }
     logln();
 
-    DeserializationError err = deserializeJson(doc, payload);
+    const DeserializationError err = deserializeJson(doc, payload);
     if (err) {
-        logf("Failed to deserialize json message: %s - message:\n%s\n",
-             err.c_str(), payload);
+        logf("Failed to deserialize json message: %s - message:\n%s\n", err.c_str(), reinterpret_cast<const char *>(payload));
         return;
     }
 
-    uint8 fanId = doc["id"];
-    uint8 speedPct = doc["speed_pct"];
+    const uint8 fanId = doc["id"];
+    const uint8 speedPct = doc["speed_pct"];
     fans[fanId].setSpeed(speedPct);
 }
