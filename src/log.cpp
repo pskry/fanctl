@@ -1,18 +1,13 @@
-//    __                  _   _
-//  / _| __ _ _ __   ___| |_| |
-// | |_ / _` | '_ \ / __| __| |
-// |  _| (_| | | | | (__| |_| |
-// |_|  \__,_|_| |_|\___|\__|_|
-//
-#ifdef DEBUG
+#ifdef LOG_SERIAL
 #include <Arduino.h>
 #endif
 
 #include "./log.h"
 
-void initLog(void) {
-#ifdef DEBUG
+void initLog() {
+#ifdef LOG_SERIAL
     Serial.begin(SERIAL_BAUD);
+    Serial.setDebugOutput(true);
     while (!Serial) {
         delay(10);
     }

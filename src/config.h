@@ -28,6 +28,9 @@
 #ifndef MQTT_PORT
 #define MQTT_PORT 1883
 #endif
+#ifndef MQTT_RETRY_MILLIS
+#define MQTT_RETRY_MILLIS 5000
+#endif
 
 #ifndef MQTT_FANCTL_TOPIC
 #define MQTT_FANCTL_TOPIC "fanctl"
@@ -39,8 +42,8 @@
 #define MQTT_PUBLISH_INTERVAL_MS 1000
 #endif
 
-#define MQTT_BUF_SIZE 256
-#define JSON_BUF_SIZE 256
+#define MQTT_BUF_SIZE 1024
+#define JSON_BUF_SIZE 1024
 
 #define SERIAL_BAUD 115200
 

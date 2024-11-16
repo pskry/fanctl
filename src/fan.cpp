@@ -11,29 +11,14 @@
 #include "./config.h"
 #include "./log.h"
 
-#define CLAMP(val, min, max) (val < min ? min : (val > max ? max : val))
-template <typename T>
-static inline T clamp(T val, T min, T max) {
-    if (val < min) {
-        return min;
-    }
-    if (val > max) {
-        return max;
-    }
-    return val;
-}
-
-Fan::Fan(const uint8 pwmPin,
-         const uint8 tachometerPin,
-         volatile uint32 *tachometerCounter,
-         void (*interruptHandler)()) {
+Fan::Fan(const uint8 pwmPin, const uint8 tachometerPin) {
     if (digitalPinToInterrupt(tachometerPin) < 0) {
         logf("ERROR: PIN <%d> is NOT an interrupt pin\n", tachometerPin);
     }
 
     this->pwmPin = pwmPin;
     this->tachometerPin = tachometerPin;
-    this->tachometerCounter = tachometerCounter;
+    this->tachometerCounter = 0;
     this->targetSpeed = 0;
 
     analogWriteFreq(PWM_FREQ);
@@ -41,19 +26,25 @@ Fan::Fan(const uint8 pwmPin,
     pinMode(pwmPin, OUTPUT);
     analogWrite(pwmPin, PWM_DUTY_MIN);
     pinMode(tachometerPin, INPUT_PULLUP);
-    attachInterrupt(tachometerPin, interruptHandler, FALLING);
+    attachInterruptArg(tachometerPin, &Fan::interruptHandler, this, FALLING);
 }
 
 void Fan::setSpeed(const uint8 speedPercent) {
-    const uint8 clampedPct = CLAMP(speedPercent, FAN_SPEED_PCT_MIN, FAN_SPEED_PCT_MAX);
-    const uint16 trgSpd = (PWM_DUTY_MAX * clampedPct) / FAN_SPEED_PCT_MAX;
-    logf("pct=%d, clampedPct=%d, trgSpd=%d\n", speedPercent, clampedPct, trgSpd);
+    const uint8 clampedPct = constrain(speedPercent, FAN_SPEED_PCT_MIN, FAN_SPEED_PCT_MAX);
+    const uint16 targetSpeed = (PWM_DUTY_MAX * clampedPct) / FAN_SPEED_PCT_MAX;
+    logf("pct=%d, clampedPct=%d, targetSpeed=%d\n", speedPercent, clampedPct, targetSpeed);
 
-    this->targetSpeed = trgSpd;
+    this->targetSpeed = targetSpeed;
 }
 
 void Fan::update() { analogWrite(pwmPin, targetSpeed); }
 
-uint32 Fan::getTachometerCount() const { return *tachometerCounter; }
+uint32 Fan::getTachometerCount() const { return tachometerCounter; }
+uint16 Fan::getTargetSpeed() const { return targetSpeed; }
 
-void Fan::resetTachometerCounter() { *tachometerCounter = 0; }
+void Fan::resetTachometerCounter() { tachometerCounter = 0; }
+
+void Fan::interruptHandler(void *arg) {
+    auto *fan = static_cast<Fan *>(arg);
+    fan->tachometerCounter++;
+}
