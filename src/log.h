@@ -12,7 +12,7 @@ void initLog();
 #ifdef LOG_SERIAL
 #define log(arg)           Serial.print(arg)
 #define logln(arg)         Serial.println(arg)
-#define logf(fmt, args...) Serial.printf(fmt, args)
+#define logf(fmt, ...)     Serial.printf(fmt, __VA_ARGS__)
 #else
 #define log(arg)           do { } while (0)
 #define logln(arg)         do { } while (0)

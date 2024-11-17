@@ -1,9 +1,3 @@
-//    __                  _   _
-//  / _| __ _ _ __   ___| |_| |
-// | |_ / _` | '_ \ / __| __| |
-// |  _| (_| | | | | (__| |_| |
-// |_|  \__,_|_| |_|\___|\__|_|
-//
 #include <ArduinoJson.h>
 #include <ESP8266WiFi.h>
 #include <PubSubClient.h>
@@ -19,15 +13,13 @@
 WiFiClient wifiClient;
 PubSubClient client(wifiClient);
 
-StaticJsonDocument<JSON_BUF_SIZE> doc;
-
 /* ************************************************************************** */
 /* fan-setup                                                                  */
 /* ************************************************************************** */
 std::array<Fan, 3> fans = {
-    Fan(D4, D7),
-    Fan(D3, D5),
     Fan(D1, D6),
+    Fan(D3, D5),
+    Fan(D4, D7),
 };
 
 /* ************************************************************************** */
@@ -35,8 +27,10 @@ std::array<Fan, 3> fans = {
 /* ************************************************************************** */
 static void initWiFi();
 static void initMqttClient();
+static void updateFans();
+static void publishMqttMessage(uint32 deltaMillis);
 static void ensureMqttConnection();
-static void onMqttMessage(const char *topic, byte *payload, unsigned int length);
+static void onMqttMessage(const char *topic, byte *payload, uint length);
 
 void setup() {
     initLog();
@@ -63,7 +57,7 @@ void initWiFi() {
 }
 
 void initMqttClient() {
-    client.setBufferSize(MQTT_BUF_SIZE);
+    client.setBufferSize(BUF_SIZE);
     client.setServer(MQTT_HOST, MQTT_PORT);
     client.setCallback(onMqttMessage);
 }
@@ -72,67 +66,92 @@ void initMqttClient() {
 /* loop                                                                       */
 /* ************************************************************************** */
 void loop() {
-    static uint32 prev = 0;
+    static uint32 prevUpdate = millis();
+    static uint32 prevPublish = millis();
 
     ensureMqttConnection();
     client.loop();
 
     const uint32 now = millis();
-    const uint32 diff = now - prev;
-    if (diff >= MQTT_PUBLISH_INTERVAL_MS) {
-        char buf[MQTT_BUF_SIZE];
-        prev = now;
+    if (const uint32 dUpdate = now - prevUpdate;
+        dUpdate >= FAN_UPDATE_INTERVAL_MS) {
+        updateFans();
+        prevUpdate = now;
+    }
 
-        constexpr size_t numFans = fans.size();
-        uint32 tachometerCounts[numFans];
-        uint16 targetSpeeds[numFans];
-
-        // copy fan tachometer counts into local array
-        // to keep the critical section as short as possible
-        noInterrupts();
-        for (size_t i = 0; i < numFans; i++) {
-            Fan fan = fans[i];
-            tachometerCounts[i] = fan.getTachometerCount();
-            targetSpeeds[i] = fan.getTargetSpeed();
-            fan.resetTachometerCounter();
-            fan.update();
-        }
-        interrupts();
-
-        doc.clear();
-
-        real64 diffRatio = static_cast<real64>(diff) / static_cast<real64>(MQTT_PUBLISH_INTERVAL_MS);
-
-        doc["info"]["delta_ms"] = diff;
-        doc["info"]["delta_ratio"] = diffRatio;
-        doc["info"]["interval_ms"] = MQTT_PUBLISH_INTERVAL_MS;
-        for (size_t i = 0; i < numFans; ++i) {
-            constexpr real64 intervalsPerSecond = 1000.0 / static_cast<real64>(MQTT_PUBLISH_INTERVAL_MS);
-            constexpr real64 secondsPerMinute = 60.0;
-
-            uint32 tachometerCount = tachometerCounts[i];
-            real64 rotationsPerInt = tachometerCount * diffRatio;
-            real64 rotationsPerSec = rotationsPerInt * intervalsPerSecond;
-            real64 rotationsPerMin = rotationsPerSec * secondsPerMinute;
-
-            doc["fans"][i]["target_speed"] = targetSpeeds[i];
-            doc["fans"][i]["target_speed_pct"] = (targetSpeeds[i] * FAN_SPEED_PCT_MAX) / PWM_DUTY_MAX;
-            doc["fans"][i]["tachometer_count"] = tachometerCount;
-            doc["fans"][i]["rpi"] = rotationsPerInt;
-            doc["fans"][i]["rps"] = rotationsPerSec;
-            doc["fans"][i]["rpm"] = rotationsPerMin;
-        }
-
-#ifdef LOG_SERIAL
-        serializeJsonPretty(doc, buf, MQTT_BUF_SIZE);
-#else
-        serializeJson(doc, buf, MQTT_BUF_SIZE);
-#endif
-        logf("publishing to topic '%s' - payload:\n%s\n", MQTT_FANRPM_TOPIC, buf);
-        client.publish(MQTT_FANRPM_TOPIC, buf);
+    if (const uint32 dPublish = now - prevPublish;
+        dPublish >= MQTT_PUBLISH_INTERVAL_MS) {
+        publishMqttMessage(dPublish);
+        prevPublish = now;
     }
 
     yield();
+}
+
+void updateFans() {
+    constexpr size_t numFans = fans.size();
+
+    noInterrupts();
+    for (size_t i = 0; i < numFans; i++) {
+        Fan &fan = fans[i];
+        fan.update();
+    }
+    interrupts();
+}
+
+void publishMqttMessage(const uint32 deltaMillis) {
+    constexpr size_t numFans = fans.size();
+
+    StaticJsonDocument<BUF_SIZE> doc;
+    char buf[BUF_SIZE];
+
+    uint32 tachometerCounts[numFans];
+    uint16 targetSpeeds[numFans];
+
+    // copy fan tachometer counts into local array
+    // to keep the critical section as short as possible
+    noInterrupts();
+    for (size_t i = 0; i < numFans; i++) {
+        Fan &fan = fans[i];
+        tachometerCounts[i] = fan.getTachometerCount();
+        targetSpeeds[i] = fan.getTargetSpeed();
+        fan.resetTachometerCount();
+    }
+    interrupts();
+
+    doc.clear();
+
+    real64 deltaRatio = static_cast<real64>(deltaMillis) /
+        static_cast<real64>(MQTT_PUBLISH_INTERVAL_MS);
+
+    doc["info"]["delta_ms"] = deltaMillis;
+    doc["info"]["interval_ms"] = MQTT_PUBLISH_INTERVAL_MS;
+    doc["info"]["delta_ratio"] = deltaRatio;
+    for (size_t i = 0; i < numFans; ++i) {
+        constexpr real64 intervalsPerSecond = 1000.0 /
+            static_cast<real64>(MQTT_PUBLISH_INTERVAL_MS);
+        constexpr real64 secondsPerMinute = 60.0;
+
+        uint32 tachometerCount = tachometerCounts[i];
+        real64 rotationsPerInt = tachometerCount * deltaRatio;
+        real64 rotationsPerSec = rotationsPerInt * intervalsPerSecond;
+        real64 rotationsPerMin = rotationsPerSec * secondsPerMinute;
+
+        doc["fans"][i]["target_speed"] = targetSpeeds[i];
+        doc["fans"][i]["target_speed_pct"] = targetSpeeds[i] * 100 / PWM_DUTY_MAX;
+        doc["fans"][i]["tachometer_count"] = tachometerCount;
+        doc["fans"][i]["rpi"] = rotationsPerInt;
+        doc["fans"][i]["rps"] = rotationsPerSec;
+        doc["fans"][i]["rpm"] = rotationsPerMin;
+    }
+
+#ifdef LOG_SERIAL
+    serializeJsonPretty(doc, buf, BUF_SIZE);
+#else
+    serializeJson(doc, buf, BUF_SIZE);
+#endif
+    logf("publishing to topic '%s' - payload:\n%s\n", MQTT_FANRPM_TOPIC, buf);
+    client.publish(MQTT_FANRPM_TOPIC, buf);
 }
 
 void ensureMqttConnection() {
@@ -143,7 +162,6 @@ void ensureMqttConnection() {
     while (!client.connected()) {
         if (client.connect(HOSTNAME, MQTT_USER, MQTT_PASS)) {
             logln("Connected.");
-
             logf("Subscribing to topic '%s' ...", MQTT_FANCTL_TOPIC);
             client.subscribe(MQTT_FANCTL_TOPIC);
             logln(" done.");
@@ -156,14 +174,18 @@ void ensureMqttConnection() {
     }
 }
 
-void onMqttMessage(const char *topic, byte *payload, const unsigned int length) {
+void onMqttMessage(const char *topic, byte *payload, const uint length) {
     (void)topic;
-    (void)length;
 
-    logf("Message arrived on topic '%s':\n%s\n",
-         topic,
-         reinterpret_cast<const char *>(payload));
+    constexpr size_t numFans = fans.size();
 
+    StaticJsonDocument<BUF_SIZE> doc;
+
+    logf("Message arrived on topic '%s':\n", topic);
+    for (uint i = 0; i < length; i++) {
+        log(static_cast<char>(payload[i]));
+    }
+    logln();
 
     if (const DeserializationError err = deserializeJson(doc, payload); err) {
         logf("Failed to deserialize json message: %s - message:\n%s\n",
@@ -172,7 +194,30 @@ void onMqttMessage(const char *topic, byte *payload, const unsigned int length) 
         return;
     }
 
-    const uint8 fanId = doc["id"];
-    const uint8 speedPct = doc["speed_pct"];
-    fans[fanId].setSpeed(speedPct);
+    if (!doc.containsKey("id")) {
+        logln("Invalid FANCTL command: 'id' field is required");
+        return;
+    }
+
+    const int fanId = doc["id"] | -1;
+    if (fanId < 0 || static_cast<uint>(fanId) >= numFans) {
+        logf("Invalid fan id '%s' - fan id must be between 0 and %d\n", doc["id"].as<const char *>(), numFans);
+        return;
+    }
+
+    // we set the speed to 0 if we read anything out
+    // of the ordinary from either 'speed' or 'speed_pct'.
+    //
+    // 'speed' takes precedence.
+    if (doc.containsKey("speed")) {
+        const int speed = doc["speed"] | 0;
+        logf("Setting fan '%d' to speed '%d'\n", fanId, speed);
+        fans[fanId].setSpeed(speed);
+    } else if (doc.containsKey("speed_pct")) {
+        const int speedPct = doc["speed_pct"] | 0;
+        logf("Setting fan '%d' to speed_pct '%d'\n", fanId, speedPct);
+        fans[fanId].setSpeedPct(speedPct);
+    } else {
+        logln("Invalid FANCTL command: either 'speed' or 'speed_pct' is required");
+    }
 }

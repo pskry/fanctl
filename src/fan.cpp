@@ -1,9 +1,3 @@
-//    __                  _   _
-//  / _| __ _ _ __   ___| |_| |
-// | |_ / _` | '_ \ / __| __| |
-// |  _| (_| | | | | (__| |_| |
-// |_|  \__,_|_| |_|\___|\__|_|
-//
 #include "fan.h"
 
 #include <Arduino.h>
@@ -18,7 +12,7 @@ Fan::Fan(const uint8 pwmPin, const uint8 tachometerPin) {
 
     this->pwmPin = pwmPin;
     this->tachometerPin = tachometerPin;
-    this->tachometerCounter = 0;
+    this->tachometerCount = 0;
     this->targetSpeed = 0;
 
     analogWriteFreq(PWM_FREQ);
@@ -28,23 +22,28 @@ Fan::Fan(const uint8 pwmPin, const uint8 tachometerPin) {
     pinMode(tachometerPin, INPUT_PULLUP);
     attachInterruptArg(tachometerPin, &Fan::interruptHandler, this, FALLING);
 }
+void Fan::setSpeed(const int speed) {
+    const uint16 targetSpeed = constrain(speed, PWM_DUTY_MIN, PWM_DUTY_MAX);
+    logf("setSpeed: speed=%d, targetSpeed=%d\n", speed, targetSpeed);
 
-void Fan::setSpeed(const uint8 speedPercent) {
-    const uint8 clampedPct = constrain(speedPercent, FAN_SPEED_PCT_MIN, FAN_SPEED_PCT_MAX);
-    const uint16 targetSpeed = (PWM_DUTY_MAX * clampedPct) / FAN_SPEED_PCT_MAX;
-    logf("pct=%d, clampedPct=%d, targetSpeed=%d\n", speedPercent, clampedPct, targetSpeed);
+    this->targetSpeed = targetSpeed;
+}
+
+void Fan::setSpeedPct(const int speedPct) {
+    const uint8 clampedPct = constrain(speedPct, FAN_SPEED_PCT_MIN, FAN_SPEED_PCT_MAX);
+    const uint16 targetSpeed = PWM_DUTY_MAX * clampedPct / 100;
+    logf("setSpeedPct: speedPct=%d, clampedPct=%d, targetSpeed=%d\n", speedPct, clampedPct, targetSpeed);
 
     this->targetSpeed = targetSpeed;
 }
 
 void Fan::update() { analogWrite(pwmPin, targetSpeed); }
 
-uint32 Fan::getTachometerCount() const { return tachometerCounter; }
+uint32 Fan::getTachometerCount() const { return tachometerCount; }
 uint16 Fan::getTargetSpeed() const { return targetSpeed; }
-
-void Fan::resetTachometerCounter() { tachometerCounter = 0; }
+void Fan::resetTachometerCount() { tachometerCount = 0; }
 
 void Fan::interruptHandler(void *arg) {
     auto *fan = static_cast<Fan *>(arg);
-    fan->tachometerCounter++;
+    fan->tachometerCount++;
 }

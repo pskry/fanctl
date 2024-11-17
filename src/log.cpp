@@ -1,7 +1,3 @@
-#ifdef LOG_SERIAL
-#include <Arduino.h>
-#endif
-
 #include "./log.h"
 
 void initLog() {
