@@ -17,7 +17,7 @@ void initLog();
 #else
 #define log(arg)           do { } while (0)
 #define logln(arg)         do { } while (0)
-#define logf(fmt, args...) do { } while (0)
+#define logf(fmt, ...)     do { } while (0)
 #endif
 // clang-format on
 
