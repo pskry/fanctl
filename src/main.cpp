@@ -102,14 +102,13 @@ void updateFans() {
 void publishMqttMessage(const uint32 deltaMillis) {
     constexpr size_t numFans = fans.size();
 
-    StaticJsonDocument<BUF_SIZE> doc;
     char buf[BUF_SIZE];
 
     uint32 tachometerCounts[numFans];
     uint16 targetSpeeds[numFans];
 
-    // copy fan tachometer counts into local array
-    // to keep the critical section as short as possible
+    // we copy fan info into local array in order to
+    // keep the critical section as short as possible
     noInterrupts();
     for (size_t i = 0; i < numFans; i++) {
         Fan &fan = fans[i];
@@ -119,30 +118,32 @@ void publishMqttMessage(const uint32 deltaMillis) {
     }
     interrupts();
 
-    doc.clear();
-
-    real64 deltaRatio = static_cast<real64>(deltaMillis) /
-        static_cast<real64>(MQTT_PUBLISH_INTERVAL_MS);
-
-    doc["info"]["delta_ms"] = deltaMillis;
-    doc["info"]["interval_ms"] = MQTT_PUBLISH_INTERVAL_MS;
-    doc["info"]["delta_ratio"] = deltaRatio;
+    StaticJsonDocument<BUF_SIZE> doc;
+    doc["general"]["delta_ms"] = deltaMillis;
+    doc["general"]["interval_ms"] = MQTT_PUBLISH_INTERVAL_MS;
+    doc["general"]["pwm"]["freq"] = PWM_FREQ;
+    doc["general"]["pwm"]["duty_min"] = PWM_DUTY_MIN;
+    doc["general"]["pwm"]["duty_max"] = PWM_DUTY_MAX;
     for (size_t i = 0; i < numFans; ++i) {
-        constexpr real64 intervalsPerSecond = 1000.0 /
-            static_cast<real64>(MQTT_PUBLISH_INTERVAL_MS);
-        constexpr real64 secondsPerMinute = 60.0;
-
+        // example:
+        // MQTT_PUBLISH_INTERVAL_MS = 1000    // count and report every second
+        // deltaMillis              = 998     // loop ran 2ms too quickly
+        // tachometerCount          = 20      // the fan completed 20 rotations
+        //                                       since the last report
+        // ---------------------------------------------------------------------
+        // rotPerMs                 = 20 / 998             =~ 0,02004008
+        // rotPerSec                = 20 * 1000 / 998      =~ 20,04008016
+        // rotPerMin                = 20 * 1000 * 60 / 998 =~ 1202,40480962
         uint32 tachometerCount = tachometerCounts[i];
-        real64 rotationsPerInt = tachometerCount * deltaRatio;
-        real64 rotationsPerSec = rotationsPerInt * intervalsPerSecond;
-        real64 rotationsPerMin = rotationsPerSec * secondsPerMinute;
+        real64 rotPerMs = static_cast<real64>(tachometerCount) /
+            static_cast<real64>(deltaMillis);
+        real64 rotPerSec = rotPerMs * 1000.0;
+        real64 rotPerMin = rotPerSec * 60.0;
 
         doc["fans"][i]["target_speed"] = targetSpeeds[i];
-        doc["fans"][i]["target_speed_pct"] = targetSpeeds[i] * 100 / PWM_DUTY_MAX;
         doc["fans"][i]["tachometer_count"] = tachometerCount;
-        doc["fans"][i]["rpi"] = rotationsPerInt;
-        doc["fans"][i]["rps"] = rotationsPerSec;
-        doc["fans"][i]["rpm"] = rotationsPerMin;
+        doc["fans"][i]["rps"] = rotPerSec;
+        doc["fans"][i]["rpm"] = rotPerMin;
     }
 
 #ifdef LOG_SERIAL
@@ -150,8 +151,8 @@ void publishMqttMessage(const uint32 deltaMillis) {
 #else
     serializeJson(doc, buf, BUF_SIZE);
 #endif
-    logf("publishing to topic '%s' - payload:\n%s\n", MQTT_FANRPM_TOPIC, buf);
-    client.publish(MQTT_FANRPM_TOPIC, buf);
+    logf("publishing to topic '%s' - payload:\n%s\n", MQTT_FANINFO_TOPIC, buf);
+    client.publish(MQTT_FANINFO_TOPIC, buf);
 }
 
 void ensureMqttConnection() {

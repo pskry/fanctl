@@ -4,7 +4,6 @@
 #include <c_types.h>
 
 class Fan {
-private:
     uint8 pwmPin;
     uint8 tachometerPin;
     uint16 targetSpeed;
@@ -23,8 +22,5 @@ public:
 private:
     static void IRAM_ATTR interruptHandler(void *arg);
 };
-
-#define SETUP_FAN(id, pwmPin, tachPin) Fan fan##id(pwmPin, tachPin);
-#define FAN(id) fan##id
 
 #endif

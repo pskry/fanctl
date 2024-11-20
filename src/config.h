@@ -35,8 +35,8 @@
 #ifndef MQTT_FANCTL_TOPIC
 #define MQTT_FANCTL_TOPIC "fanctl"
 #endif
-#ifndef MQTT_FANRPM_TOPIC
-#define MQTT_FANRPM_TOPIC "fanrpm"
+#ifndef MQTT_FANINFO_TOPIC
+#define MQTT_FANINFO_TOPIC "faninfo"
 #endif
 #ifndef MQTT_PUBLISH_INTERVAL_MS
 #define MQTT_PUBLISH_INTERVAL_MS 1000
@@ -50,7 +50,5 @@
 #define PWM_FREQ 25000
 #define PWM_DUTY_MIN 0
 #define PWM_DUTY_MAX 16
-#define FAN_SPEED_PCT_MIN 0
-#define FAN_SPEED_PCT_MAX 100
 
 #endif

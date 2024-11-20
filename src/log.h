@@ -9,6 +9,7 @@
 
 void initLog();
 
+// clang-format off
 #ifdef LOG_SERIAL
 #define log(arg)           Serial.print(arg)
 #define logln(arg)         Serial.println(arg)
@@ -18,5 +19,6 @@ void initLog();
 #define logln(arg)         do { } while (0)
 #define logf(fmt, args...) do { } while (0)
 #endif
+// clang-format on
 
 #endif

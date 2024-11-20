@@ -30,14 +30,24 @@ void Fan::setSpeed(const int speed) {
 }
 
 void Fan::setSpeedPct(const int speedPct) {
-    const uint8 clampedPct = constrain(speedPct, FAN_SPEED_PCT_MIN, FAN_SPEED_PCT_MAX);
-    const uint16 targetSpeed = PWM_DUTY_MAX * clampedPct / 100;
-    logf("setSpeedPct: speedPct=%d, clampedPct=%d, targetSpeed=%d\n", speedPct, clampedPct, targetSpeed);
+    constexpr int minPct = 0;
+    constexpr int maxPct = 100;
+    constexpr real32 pwmRatio = static_cast<real32>(PWM_DUTY_MAX) / 100.0;
+
+    const uint8 clampedPct = constrain(speedPct, minPct, maxPct);
+    const real32 targetSpeedExact = static_cast<real32>(clampedPct) * pwmRatio;
+    const uint16 targetSpeed = lroundf(targetSpeedExact);
+    logf("setSpeedPct: speedPct=%d, clampedPct=%d, targetSpeed=%d\n",
+         speedPct, clampedPct, targetSpeed);
 
     this->targetSpeed = targetSpeed;
 }
 
-void Fan::update() { analogWrite(pwmPin, targetSpeed); }
+// ReSharper disable once CppMemberFunctionMayBeConst
+//   - update writes to a hardware pin
+void Fan::update() { // NOLINT(readability-make-member-function-const)
+    analogWrite(pwmPin, targetSpeed);
+}
 
 uint32 Fan::getTachometerCount() const { return tachometerCount; }
 uint16 Fan::getTargetSpeed() const { return targetSpeed; }
