@@ -40,7 +40,6 @@ providing the following information:
    "general": {
       "delta_ms": 4008,
       "interval_ms": 4000,
-      "delta_ratio": 1.002,
       "pwm": {
          "freq": 25000,
          "duty_min": 0,
@@ -51,42 +50,21 @@ providing the following information:
       {
          "target_speed": 12,
          "tachometer_count": 144,
-         "rpi": 144,
          "rps": 36,
          "rpm": 2156
       },
       {
          "target_speed": 6,
          "tachometer_count": 74,
-         "rpi": 74,
          "rps": 18,
          "rpm": 1108
       },
       {
          "target_speed": 16,
          "tachometer_count": 156,
-         "rpi": 74,
          "rps": 39,
          "rpm": 1109
       }
    ]
 }
-```
-
-Periodically reads from up to 4 sensors and puts the temperature values onto a
-MQTT topic in the following JSON form:
-
-```json
-[
-  {
-    "id": 0,
-    "addr": "0xdeadbeef01",
-    "celsius": 23.5
-  },
-  {
-    "id": 1,
-    "addr": "0xdeadbeef02",
-    "celsius": 19.5
-  }
-]
 ```
